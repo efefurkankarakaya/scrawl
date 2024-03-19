@@ -5,20 +5,12 @@ using System.Text.Json;
 using Microsoft.Playwright;
 
 const string outputPath = "output";
+string fileName = DateTime.Now.ToString("dd-MM-yyyy-h-mm-tt") + ".txt";
 
 if (!Directory.Exists("output"))
 {
   Directory.CreateDirectory("output");
 }
-
-using (StreamWriter file = new StreamWriter(Path.Combine("output", DateTime.Now.ToString("dd-MM-yyyy-h-mm-tt") + ".txt")))
-{
-  file.WriteLine("Hello");
-}
-
-// disable js
-// mobile ip / proxy
-// mobile view
 
 // Set initial viewports
 int[] viewport = new int[2] { 1920, 1080 };
@@ -114,46 +106,51 @@ string[] details = new string[itemCount];
 int emptySectionCount = 0, totalPrice = 0;
 
 
-foreach (var item in items)
+using (StreamWriter file = new StreamWriter(Path.Combine("output", DateTime.Now.ToString("dd-MM-yyyy-h-mm-tt") + ".txt")))
 {
-  URLPostfix = (await item.Locator("a").GetAttributeAsync("href")).ToString();
-
-  if (!string.IsNullOrEmpty(URLPostfix) && URLPostfix.Contains("/ilan/"))
+  foreach (var item in items)
   {
-    try
+    URLPostfix = (await item.Locator("a").GetAttributeAsync("href")).ToString();
+
+    if (!string.IsNullOrEmpty(URLPostfix) && URLPostfix.Contains("/ilan/"))
     {
-      detailPageURL = "https://sahibinden.com" + URLPostfix;
-      Console.WriteLine(detailPageURL);
-      await iPhonePage.GotoAsync(detailPageURL);
-      await detailPage.WaitForTimeoutAsync(5000);
-      await detailPage.GotoAsync(detailPageURL);
-      title = (await detailPage.Locator(".classifiedDetailTitle > h1").TextContentAsync()).ToString().Trim();
-      price = (await detailPage.Locator("#favoriteClassifiedPrice").GetAttributeAsync("value")).ToString().Trim();
-
-      data = title + ": " + price + "\n";
-      Console.WriteLine(data);
-
-      if (!string.IsNullOrEmpty(price))
+      try
       {
-        string cleanedPrice = price.Substring(0, price.Length - 3).Replace(".", "");
-        totalPrice += Int32.Parse(cleanedPrice);
-        Console.WriteLine(totalPrice);
+        detailPageURL = "https://sahibinden.com" + URLPostfix;
+        Console.WriteLine(detailPageURL);
+        await iPhonePage.GotoAsync(detailPageURL);
+        await detailPage.WaitForTimeoutAsync(5000);
+        await detailPage.GotoAsync(detailPageURL);
+        title = (await detailPage.Locator(".classifiedDetailTitle > h1").TextContentAsync()).ToString().Trim();
+        price = (await detailPage.Locator("#favoriteClassifiedPrice").GetAttributeAsync("value")).ToString().Trim();
+
+        data = title + ": " + price + "\n";
+        Console.WriteLine(data);
+        file.(data);
+
+        if (!string.IsNullOrEmpty(price))
+        {
+          string cleanedPrice = price.Substring(0, price.Length - 3).Replace(".", "");
+          totalPrice += Int32.Parse(cleanedPrice);
+          Console.WriteLine(totalPrice);
+        }
+        else
+        {
+          emptySectionCount++;
+        }
       }
-      else
+      catch (Exception error)
       {
+        Console.WriteLine(error.Data);
         emptySectionCount++;
       }
+
+      await page.WaitForTimeoutAsync(10000);
     }
-    catch (Exception)
+    else
     {
       emptySectionCount++;
     }
-
-    await page.WaitForTimeoutAsync(10000);
-  }
-  else
-  {
-    emptySectionCount++;
   }
 }
 
