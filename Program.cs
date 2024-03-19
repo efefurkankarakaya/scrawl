@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Playwright;
 
+const string baseURL = "https://www.sahibinden.com";
 const string outputFolder = "output";
 string outputFile = DateTime.Now.ToString("dd-MM-yyyy-h-mm-ss-tt") + ".txt";
 
@@ -96,9 +97,9 @@ if (webdriverResult != "missing (passed)")
 }
 // await page.GotoAsync("https://fingerprint.com/products/bot-detection/");
 
-await page.GotoAsync("https://www.sahibinden.com/");
+await page.GotoAsync(baseURL);
 await page.WaitForTimeoutAsync(5000); // Wait for Cloudflare is loaded.
-await page.GotoAsync("https://www.sahibinden.com/"); // Then go to the origin domain again.
+await page.GotoAsync(baseURL); // Then go to the origin domain again.
 
 page.Locator(".vitrin-list.clearfix"); // Wait until showcase is loaded.
 
@@ -123,7 +124,7 @@ using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFil
     {
       try
       {
-        detailPageURL = "https://sahibinden.com" + URLPostfix;
+        detailPageURL = baseURL + URLPostfix;
         Console.WriteLine(detailPageURL);
         await iPhonePage.GotoAsync(detailPageURL);
         await detailPage.WaitForTimeoutAsync(5000);
