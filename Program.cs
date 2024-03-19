@@ -1,8 +1,4 @@
-﻿using System.ComponentModel;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text.Json;
-using Microsoft.Playwright;
+﻿using Microsoft.Playwright;
 
 const string baseURL = "https://www.sahibinden.com";
 const string outputFolder = "output";
@@ -18,15 +14,9 @@ using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFil
   file.Write("");
 }
 
-
-// Set initial viewports
-int[] viewport = new int[2] { 1920, 1080 };
-// Define a user data folder to use persistent user data like a real user.
-const string userDataDir = "./BrowserUser";
-
 using var playwright = await Playwright.CreateAsync();
 
-var proxy = new Proxy { Server = "per-context" };
+var proxy = new Proxy { Server = "per-context" }; // To support multiple proxies for each tab
 await using var browser = await playwright.Chromium.LaunchAsync(new()
 {
   Headless = false,
@@ -38,29 +28,12 @@ await using var browser = await playwright.Chromium.LaunchAsync(new()
 var iPhone = playwright.Devices["iPhone 13"];
 
 var browserContext = await browser.NewContextAsync(new BrowserNewContextOptions()
-{
-  // BaseURL = "https://sahibinden.com",
-  // UserAgent = UserAgent.MacOS
-});
+{ });
 var iPhoneContext = await browser.NewContextAsync(iPhone);
 
-// Create a browser context that uses persistent data.
-// var context = await playwright.Firefox.LaunchPersistentContextAsync(userDataDir, new()
-// {
-//   Headless = false,
-//   // To make it seem a real user.
-//   UserAgent = userAgent,
-//   // To prevent detection 'cause of Chrome defaults.
-//   IgnoreDefaultArgs = new string[] { "--enable-automation", "--no-sandbox" }, // Remove --no-sandbox
-//   Channel = "firefox"
-//   // ExecutablePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-// });
 var page = await browserContext.NewPageAsync();
 var detailPage = await browserContext.NewPageAsync();
 var iPhonePage = await iPhoneContext.NewPageAsync();
-
-// Set viewport automatically depends on OS.
-// await page.SetViewportSizeAsync(viewport[0], viewport[1]);
 
 string script = @"const defaultGetter = Object.getOwnPropertyDescriptor(
       Navigator.prototype,
