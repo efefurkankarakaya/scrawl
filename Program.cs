@@ -1,48 +1,162 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 using Microsoft.Playwright;
+
+const string outputPath = "output";
+
+if (!Directory.Exists("output"))
+{
+  Directory.CreateDirectory("output");
+}
+
+using (StreamWriter file = new StreamWriter(Path.Combine("output", DateTime.Now.ToString("dd-MM-yyyy-h-mm-tt") + ".txt")))
+{
+  file.WriteLine("Hello");
+}
+
+// disable js
+// mobile ip / proxy
+// mobile view
 
 // Set initial viewports
 int[] viewport = new int[2] { 1920, 1080 };
 // Define a user data folder to use persistent user data like a real user.
 const string userDataDir = "./BrowserUser";
 
-string userAgent = UserAgent.Windows;
-if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-{
-  viewport[0] = 1512;
-  viewport[1] = 982;
-  userAgent = UserAgent.MacOS;
-}
-else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-{
-  userAgent = UserAgent.Windows;
-}
-else
-{
-  userAgent = UserAgent.Linux;
-}
-
 using var playwright = await Playwright.CreateAsync();
-// Create a browser context that uses persistent data.
-await using var browser = await playwright.Chromium.LaunchPersistentContextAsync(userDataDir, new()
+
+var proxy = new Proxy { Server = "per-context" };
+await using var browser = await playwright.Chromium.LaunchAsync(new()
 {
   Headless = false,
-  // To make it seem a real user.
-  UserAgent = userAgent,
-  // To prevent detection 'cause of Chrome defaults..
-  IgnoreDefaultArgs = new string[] { "--enable-automation", "--no-sandbox" }
+  IgnoreDefaultArgs = new string[] { "--enable-automation", "--no-sandbox" },
+  Channel = "chrome",
+  // Proxy = proxy
 });
-var page = await browser.NewPageAsync();
+
+var iPhone = playwright.Devices["iPhone 13"];
+
+var browserContext = await browser.NewContextAsync(new BrowserNewContextOptions()
+{
+  // BaseURL = "https://sahibinden.com",
+  // UserAgent = UserAgent.MacOS
+});
+var iPhoneContext = await browser.NewContextAsync(iPhone);
+
+// Create a browser context that uses persistent data.
+// var context = await playwright.Firefox.LaunchPersistentContextAsync(userDataDir, new()
+// {
+//   Headless = false,
+//   // To make it seem a real user.
+//   UserAgent = userAgent,
+//   // To prevent detection 'cause of Chrome defaults.
+//   IgnoreDefaultArgs = new string[] { "--enable-automation", "--no-sandbox" }, // Remove --no-sandbox
+//   Channel = "firefox"
+//   // ExecutablePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+// });
+var page = await browserContext.NewPageAsync();
+var detailPage = await browserContext.NewPageAsync();
+var iPhonePage = await iPhoneContext.NewPageAsync();
 
 // Set viewport automatically depends on OS.
-await page.SetViewportSizeAsync(viewport[0], viewport[1]);
-await page.AddInitScriptAsync("navigation.webdriver = false");
+// await page.SetViewportSizeAsync(viewport[0], viewport[1]);
+
+string script = @"const defaultGetter = Object.getOwnPropertyDescriptor(
+      Navigator.prototype,
+      'webdriver'
+    ).get;
+    defaultGetter.apply(navigator);
+    defaultGetter.toString();
+    Object.defineProperty(Navigator.prototype, 'webdriver', {
+      set: undefined,
+      enumerable: true,
+      configurable: true,
+      get: new Proxy(defaultGetter, {
+        apply: (target, thisArg, args) => {
+          Reflect.apply(target, thisArg, args);
+          return false;
+        },
+      }),
+    });
+    const patchedGetter = Object.getOwnPropertyDescriptor(
+      Navigator.prototype,
+      'webdriver'
+    ).get;
+    patchedGetter.apply(navigator);
+    patchedGetter.toString();";
+
+await page.AddInitScriptAsync(script);
 
 await page.GotoAsync("https://bot.sannysoft.com/");
 
-await page.WaitForTimeoutAsync(100000);
+string webdriverResult = await page.Locator("#webdriver-result").TextContentAsync();
+if (webdriverResult != "missing (passed)")
+{
+  throw new Exception("Webdriver test failed.");
+}
+// await page.GotoAsync("https://fingerprint.com/products/bot-detection/");
 
-// await page.ScreenshotAsync(new()
-// {
-//   Path = "screenshot.png"
-// });
+await page.GotoAsync("https://www.sahibinden.com/");
+await page.WaitForTimeoutAsync(5000); // Wait for Cloudflare is loaded.
+await page.GotoAsync("https://www.sahibinden.com/"); // Then go to the origin domain again.
+
+page.Locator(".vitrin-list.clearfix"); // Wait until showcase is loaded.
+
+// var items = await page.EvaluateAsync<String[]>(@"() => [...document.querySelectorAll('.vitrin-list.clearfix > li')]");
+var items = await page.Locator(".vitrin-list.clearfix > li").AllAsync();
+int itemCount = items.Count();
+Console.WriteLine(itemCount);
+
+string URLPostfix, detailPageURL, title, price, data;
+string[] details = new string[itemCount];
+int emptySectionCount = 0, totalPrice = 0;
+
+
+foreach (var item in items)
+{
+  URLPostfix = (await item.Locator("a").GetAttributeAsync("href")).ToString();
+
+  if (!string.IsNullOrEmpty(URLPostfix) && URLPostfix.Contains("/ilan/"))
+  {
+    try
+    {
+      detailPageURL = "https://sahibinden.com" + URLPostfix;
+      Console.WriteLine(detailPageURL);
+      await iPhonePage.GotoAsync(detailPageURL);
+      await detailPage.WaitForTimeoutAsync(5000);
+      await detailPage.GotoAsync(detailPageURL);
+      title = (await detailPage.Locator(".classifiedDetailTitle > h1").TextContentAsync()).ToString().Trim();
+      price = (await detailPage.Locator("#favoriteClassifiedPrice").GetAttributeAsync("value")).ToString().Trim();
+
+      data = title + ": " + price + "\n";
+      Console.WriteLine(data);
+
+      if (!string.IsNullOrEmpty(price))
+      {
+        string cleanedPrice = price.Substring(0, price.Length - 3).Replace(".", "");
+        totalPrice += Int32.Parse(cleanedPrice);
+        Console.WriteLine(totalPrice);
+      }
+      else
+      {
+        emptySectionCount++;
+      }
+    }
+    catch (Exception)
+    {
+      emptySectionCount++;
+    }
+
+    await page.WaitForTimeoutAsync(10000);
+  }
+  else
+  {
+    emptySectionCount++;
+  }
+}
+
+int average = totalPrice / (itemCount - emptySectionCount);
+
+await page.WaitForTimeoutAsync(100000);

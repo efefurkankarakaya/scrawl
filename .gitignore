@@ -4,6 +4,8 @@
 ## Get latest from `dotnet new gitignore`
 
 BrowserUser/
+output/
+*.txt
 *.png
 
 # dotenv files
