@@ -3,7 +3,7 @@
 const string baseURL = "https://www.sahibinden.com";
 const string outputFolder = "output";
 string outputFile = DateTime.Now.ToString("dd-MM-yyyy-h-mm-ss-tt") + ".txt";
-var proxy = new Proxy { Server = "per-context" }; // To support multiple proxies for each tab
+// Proxy proxy = new Proxy { Server = "per-context" }; // To support multiple proxies for each tab
 
 if (!Directory.Exists(outputFolder))
 {
@@ -55,7 +55,7 @@ if (webdriverResult != "missing (passed)")
 
 /* Go to the base URL */
 await page.GotoAsync(baseURL);
-await page.WaitForTimeoutAsync(5000); /* Wait for Cloudflare is loaded and request verification. */
+await page.WaitForTimeoutAsync(5000); /* Wait for Cloudflare is loaded and request verification over secure subdomain. */
 await page.GotoAsync(baseURL); /* Then go to the origin domain, it'll allow us to pass. 
 As I observed, there's a error in Cloudflare configuration. */
 
@@ -72,29 +72,32 @@ int emptySectionCount = 0, totalPrice = 0;
 
 using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFile), true))
 {
-  int index = 1;
+  int index = 1; /* Start index from 1 (only used in displaying the items) */
   foreach (var item in items)
   {
+    /* Get the link of the detail page */
     URLPostfix = (await item.Locator("a").GetAttributeAsync("href")).ToString();
 
-    if (!string.IsNullOrEmpty(URLPostfix) && URLPostfix.Contains("/ilan/"))
+    if (!string.IsNullOrEmpty(URLPostfix) && URLPostfix.Contains("/ilan/")) /* Check if it's an ad */
     {
       try
       {
-        detailPageURL = baseURL + URLPostfix;
+        detailPageURL = baseURL + URLPostfix; /* Build URL of the next detail page */
         Console.WriteLine(detailPageURL);
-        await iPhonePage.GotoAsync(detailPageURL);
-        await detailPage.WaitForTimeoutAsync(5000);
-        await detailPage.GotoAsync(detailPageURL);
-        title = (await detailPage.Locator(".classifiedDetailTitle > h1").TextContentAsync()).ToString().Trim();
-        price = (await detailPage.Locator("#favoriteClassifiedPrice").GetAttributeAsync("value")).ToString().Trim();
+        await iPhonePage.GotoAsync(detailPageURL); /* Send request to the URL and expect Cloudflare detects that iPhone is actually bot in 2nd request. */
+        await detailPage.WaitForTimeoutAsync(5000); /* TODO: Random timeout would be better here */
+        await detailPage.GotoAsync(detailPageURL); /* Send request to the URL over Google Chrome (automation informations are overridden above with the configurations) */
+        /* Cloudflare detects iPhone as a bot but Cloudflare will think bot is already detected and the secondary browser must be the real one. */
 
-        data = index + ") " + title + ": " + price;
+        title = (await detailPage.Locator(".classifiedDetailTitle > h1").TextContentAsync()).ToString().Trim(); /* Get title of the ad */
+        price = (await detailPage.Locator("#favoriteClassifiedPrice").GetAttributeAsync("value")).ToString().Trim(); /* Get price of the ad (with the currency) */
+
+        data = index + ") " + title + ": " + price; /* Build the data that's going to be written to the file */
         Console.WriteLine(data);
-        file.WriteLine(data);
-        file.Flush();
+        file.WriteLine(data); /* Append the file */
+        file.Flush(); /* Append file each time it's written, I don't want to be waited until the stream ends. */
 
-        if (!string.IsNullOrEmpty(price))
+        if (!string.IsNullOrEmpty(price)) /* Some ads do not have price */
         {
           string cleanedPrice = price.Substring(0, price.Length - 3).Replace(".", "");
           totalPrice += Int32.Parse(cleanedPrice);
@@ -102,26 +105,30 @@ using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFil
         }
         else
         {
+          /* If an ad does not have price, then count it like empty section to calculate average accurately. */
           emptySectionCount++;
         }
       }
       catch (Exception error)
       {
-        Console.WriteLine(error.Data.ToString());
+        Console.WriteLine("=== START OF ERROR ===");
+        Console.WriteLine(error.Message);
+        Console.WriteLine("=== END OF ERROR ===");
+        /* If any unknown error is happened during crawling, exclude the broken one */
         emptySectionCount++;
       }
-
-      await page.WaitForTimeoutAsync(10000);
     }
     else
     {
+      /* If it's not an ad, then count it as empty section */
       emptySectionCount++;
     }
     index++;
   }
 }
 
-int average = totalPrice / (itemCount - emptySectionCount);
+double average = totalPrice / (itemCount - emptySectionCount); /* Calculate the average */
 Console.WriteLine("Average Price: " + average);
 
 await page.WaitForTimeoutAsync(100000);
+await browser.CloseAsync();
