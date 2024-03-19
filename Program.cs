@@ -3,6 +3,7 @@
 const string baseURL = "https://www.sahibinden.com";
 const string outputFolder = "output";
 string outputFile = DateTime.Now.ToString("dd-MM-yyyy-h-mm-ss-tt") + ".txt";
+var proxy = new Proxy { Server = "per-context" }; // To support multiple proxies for each tab
 
 if (!Directory.Exists(outputFolder))
 {
@@ -16,7 +17,7 @@ using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFil
 
 using var playwright = await Playwright.CreateAsync();
 
-var proxy = new Proxy { Server = "per-context" }; // To support multiple proxies for each tab
+/* Browser Creation */
 await using var browser = await playwright.Chromium.LaunchAsync(new()
 {
   Headless = false,
@@ -24,57 +25,41 @@ await using var browser = await playwright.Chromium.LaunchAsync(new()
   Channel = "chrome",
   // Proxy = proxy
 });
-
 var iPhone = playwright.Devices["iPhone 13"];
 
+/* Browser and iPhone context (incognito) creation */
 var browserContext = await browser.NewContextAsync(new BrowserNewContextOptions()
 { });
-var iPhoneContext = await browser.NewContextAsync(iPhone);
+var iPhoneContext = await browser.NewContextAsync(iPhone); /* Mobile devices are more likely to pass bot detection, their reputation is higher. */
 
-var page = await browserContext.NewPageAsync();
-var detailPage = await browserContext.NewPageAsync();
-var iPhonePage = await iPhoneContext.NewPageAsync();
+/* Create Tabs */
+var page = await browserContext.NewPageAsync(); /* To see the home */
+var detailPage = await browserContext.NewPageAsync(); /* To open detail pages */
+var iPhonePage = await iPhoneContext.NewPageAsync(); /* To trick Cloudflare */
 
-string script = @"const defaultGetter = Object.getOwnPropertyDescriptor(
-      Navigator.prototype,
-      'webdriver'
-    ).get;
-    defaultGetter.apply(navigator);
-    defaultGetter.toString();
-    Object.defineProperty(Navigator.prototype, 'webdriver', {
-      set: undefined,
-      enumerable: true,
-      configurable: true,
-      get: new Proxy(defaultGetter, {
-        apply: (target, thisArg, args) => {
-          Reflect.apply(target, thisArg, args);
-          return false;
-        },
-      }),
-    });
-    const patchedGetter = Object.getOwnPropertyDescriptor(
-      Navigator.prototype,
-      'webdriver'
-    ).get;
-    patchedGetter.apply(navigator);
-    patchedGetter.toString();";
+await page.AddInitScriptAsync(Utils.initialScript); /* Remove webdriver info from the page */
+await detailPage.AddInitScriptAsync(Utils.initialScript); /* Remove webdriver info from the page */
+/* We don't remove webdriver info from iPhonePage because we want it to be detected. */
 
-await page.AddInitScriptAsync(script);
+await page.GotoAsync("https://bot.sannysoft.com/"); /* Go to the bot detection website. */
 
-await page.GotoAsync("https://bot.sannysoft.com/");
-
+/* Check if we're able to pass webdriver test, otherwise stop. No need to decrease IP reputation. */
 string webdriverResult = await page.Locator("#webdriver-result").TextContentAsync();
 if (webdriverResult != "missing (passed)")
 {
   throw new Exception("Webdriver test failed.");
 }
+
+/* This is another bot detection site, but not necessary right now. */
 // await page.GotoAsync("https://fingerprint.com/products/bot-detection/");
 
+/* Go to the base URL */
 await page.GotoAsync(baseURL);
-await page.WaitForTimeoutAsync(5000); // Wait for Cloudflare is loaded.
-await page.GotoAsync(baseURL); // Then go to the origin domain again.
+await page.WaitForTimeoutAsync(5000); /* Wait for Cloudflare is loaded and request verification. */
+await page.GotoAsync(baseURL); /* Then go to the origin domain, it'll allow us to pass. 
+As I observed, there's a error in Cloudflare configuration. */
 
-page.Locator(".vitrin-list.clearfix"); // Wait until showcase is loaded.
+page.Locator(".vitrin-list.clearfix"); /* Wait until showcase is loaded. */
 
 // var items = await page.EvaluateAsync<String[]>(@"() => [...document.querySelectorAll('.vitrin-list.clearfix > li')]");
 var items = await page.Locator(".vitrin-list.clearfix > li").AllAsync();
@@ -84,7 +69,6 @@ Console.WriteLine(itemCount);
 string URLPostfix, detailPageURL, title, price, data;
 string[] details = new string[itemCount];
 int emptySectionCount = 0, totalPrice = 0;
-
 
 using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFile), true))
 {
