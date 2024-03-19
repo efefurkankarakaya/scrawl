@@ -1,8 +1,10 @@
-﻿using Microsoft.Playwright;
+﻿using System.Text.RegularExpressions;
+using Microsoft.Playwright;
 
 const string baseURL = "https://www.sahibinden.com";
 const string outputFolder = "output";
 string outputFile = DateTime.Now.ToString("dd-MM-yyyy-h-mm-ss-tt") + ".txt";
+Random random = new Random();
 // Proxy proxy = new Proxy { Server = "per-context" }; // To support multiple proxies for each tab
 
 if (!Directory.Exists(outputFolder))
@@ -67,8 +69,8 @@ int itemCount = items.Count();
 Console.WriteLine(itemCount);
 
 string URLPostfix, detailPageURL, title, price, data;
-string[] details = new string[itemCount];
 int emptySectionCount = 0, totalPrice = 0;
+float timeout = 5000;
 
 using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFile), true))
 {
@@ -85,7 +87,11 @@ using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFil
         detailPageURL = baseURL + URLPostfix; /* Build URL of the next detail page */
         Console.WriteLine(detailPageURL);
         await iPhonePage.GotoAsync(detailPageURL); /* Send request to the URL and expect Cloudflare detects that iPhone is actually bot in 2nd request. */
-        await detailPage.WaitForTimeoutAsync(5000); /* TODO: Random timeout would be better here */
+
+        timeout = random.NextInt64(5000, 10000);
+        Console.WriteLine("Waiting for " + timeout + "ms before access the detail page.");
+        await detailPage.WaitForTimeoutAsync(timeout);
+
         await detailPage.GotoAsync(detailPageURL); /* Send request to the URL over Google Chrome (automation informations are overridden above with the configurations) */
         /* Cloudflare detects iPhone as a bot but Cloudflare will think bot is already detected and the secondary browser must be the real one. */
 
@@ -99,7 +105,9 @@ using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFil
 
         if (!string.IsNullOrEmpty(price)) /* Some ads do not have price */
         {
-          string cleanedPrice = price.Substring(0, price.Length - 3).Replace(".", "");
+          // string cleanedPrice = price.Substring(0, price.Length - 3).Replace(".", "");
+          string cleanedPrice = Regex.Replace(price, @"[^0-9]", "");
+          Console.WriteLine(cleanedPrice);
           totalPrice += Int32.Parse(cleanedPrice);
           Console.WriteLine(totalPrice);
         }
@@ -117,6 +125,10 @@ using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFil
         /* If any unknown error is happened during crawling, exclude the broken one */
         emptySectionCount++;
       }
+
+      timeout = random.NextInt64(2000, 10000);
+      Console.WriteLine("Waiting for " + timeout + "ms before continuing to the iteration.");
+      await page.WaitForTimeoutAsync(timeout);
     }
     else
     {
