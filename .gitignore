@@ -5,7 +5,6 @@
 
 BrowserUser/
 output/
-*.txt
 *.png
 
 # dotenv files
