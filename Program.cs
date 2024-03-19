@@ -4,13 +4,19 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Playwright;
 
-const string outputPath = "output";
-string fileName = DateTime.Now.ToString("dd-MM-yyyy-h-mm-tt") + ".txt";
+const string outputFolder = "output";
+string outputFile = DateTime.Now.ToString("dd-MM-yyyy-h-mm-ss-tt") + ".txt";
 
-if (!Directory.Exists("output"))
+if (!Directory.Exists(outputFolder))
 {
-  Directory.CreateDirectory("output");
+  Directory.CreateDirectory(outputFolder);
 }
+
+using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFile)))
+{
+  file.Write("");
+}
+
 
 // Set initial viewports
 int[] viewport = new int[2] { 1920, 1080 };
@@ -106,8 +112,9 @@ string[] details = new string[itemCount];
 int emptySectionCount = 0, totalPrice = 0;
 
 
-using (StreamWriter file = new StreamWriter(Path.Combine("output", DateTime.Now.ToString("dd-MM-yyyy-h-mm-tt") + ".txt")))
+using (StreamWriter file = new StreamWriter(Path.Combine(outputFolder, outputFile), true))
 {
+  int index = 1;
   foreach (var item in items)
   {
     URLPostfix = (await item.Locator("a").GetAttributeAsync("href")).ToString();
@@ -124,9 +131,10 @@ using (StreamWriter file = new StreamWriter(Path.Combine("output", DateTime.Now.
         title = (await detailPage.Locator(".classifiedDetailTitle > h1").TextContentAsync()).ToString().Trim();
         price = (await detailPage.Locator("#favoriteClassifiedPrice").GetAttributeAsync("value")).ToString().Trim();
 
-        data = title + ": " + price + "\n";
+        data = index + ") " + title + ": " + price;
         Console.WriteLine(data);
-        file.(data);
+        file.WriteLine(data);
+        file.Flush();
 
         if (!string.IsNullOrEmpty(price))
         {
@@ -141,7 +149,7 @@ using (StreamWriter file = new StreamWriter(Path.Combine("output", DateTime.Now.
       }
       catch (Exception error)
       {
-        Console.WriteLine(error.Data);
+        Console.WriteLine(error.Data.ToString());
         emptySectionCount++;
       }
 
@@ -151,9 +159,11 @@ using (StreamWriter file = new StreamWriter(Path.Combine("output", DateTime.Now.
     {
       emptySectionCount++;
     }
+    index++;
   }
 }
 
 int average = totalPrice / (itemCount - emptySectionCount);
+Console.WriteLine("Average Price: " + average);
 
 await page.WaitForTimeoutAsync(100000);
